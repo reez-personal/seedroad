@@ -1,0 +1,46 @@
+[package]
+name = "seedroad"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "seedroad"
+path = "src/main.rs"
+
+[dependencies]
+wgpu = { version = "22", features = ["webgpu", "webgl"] }
+winit = { version = "0.30", features = ["rwh_06"] }
+cgmath = "0.18"
+bytemuck = { version = "1", features = ["derive"] }
+log = "0.4"
+
+# Physics: pure-Rust 3-D rigid body simulation, works on WASM.
+# We use the default features (f32 precision, 3-D).
+rapier3d = "0.22"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = "0.11"
+pollster = "0.3"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "HtmlCanvasElement",
+    "HtmlElement",
+    "Element",
+    "Navigator",
+    "Gpu",
+    "Performance",
+] }
+console_log = { version = "1", features = ["color"] }
+console_error_panic_hook = "0.1"
+wasm-bindgen-futures = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true

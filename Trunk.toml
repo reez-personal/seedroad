@@ -1,0 +1,19 @@
+# Trunk.toml — build configuration for `trunk serve` / `trunk build`.
+# Docs: https://trunkrs.dev/configuration/
+
+[build]
+# Output directory for the built WASM + JS assets.
+dist = "dist"
+# Public URL base (change to "/rust-game/" if deploying to a sub-path).
+public_url = "/"
+
+[serve]
+# Local dev server address.
+addresses = ["127.0.0.1"]
+port = 8080
+# Open the browser automatically on `trunk serve`.
+open = false
+
+[watch]
+# Also rebuild when shaders change.
+paths = ["shaders"]

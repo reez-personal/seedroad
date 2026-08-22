@@ -1,0 +1,36 @@
+# Build output
+/target/
+/dist/
+
+# Cargo lock for binaries (keep for reproducible builds; remove this line if you want to ignore it)
+# Cargo.lock
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Rust analyzer generated files
+rust-project.json
+
+# WASM / Trunk artifacts
+.trunk/
+pkg/
+
+# Environment / secrets
+.env
+*.env.local
+
+# Assets that shouldn't be committed (large binaries)
+assets/models/*.glb
+assets/models/*.gltf
+assets/textures/*.png
+assets/textures/*.jpg
+assets/textures/*.ktx2

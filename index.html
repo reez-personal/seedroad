@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rust Racer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #07080f; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+
+    #overlay {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 50% 60%, #0d1a2e 0%, #07080f 70%);
+    }
+    #overlay h1 {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 900; letter-spacing: 0.12em; color: #fff;
+      text-shadow: 0 0 60px #3af, 0 2px 4px #000;
+      margin-bottom: 0.15em;
+    }
+    #overlay .sub {
+      font-size: clamp(0.75rem, 2vw, 1rem); color: #6af;
+      letter-spacing: 0.25em; text-transform: uppercase;
+      margin-bottom: 2.5rem;
+    }
+    .controls {
+      display: flex; flex-wrap: wrap; gap: 0.6rem 1.6rem;
+      justify-content: center; margin-bottom: 3rem;
+      color: #8899aa; font-size: clamp(0.7rem, 1.6vw, 0.92rem);
+    }
+    .controls .kv { display: flex; align-items: center; gap: 0.4rem; }
+    .controls kbd {
+      background: #1a2233; border: 1px solid #334; border-radius: 4px;
+      padding: 2px 8px; color: #cce; font-family: inherit; font-size: 0.88em;
+    }
+    #play-btn {
+      padding: 14px 64px; font-size: clamp(1rem, 3vw, 1.35rem);
+      font-weight: 800; letter-spacing: 0.1em;
+      background: linear-gradient(135deg, #d42020, #ff4040);
+      color: #fff; border: none; border-radius: 8px; cursor: pointer;
+      box-shadow: 0 0 40px #d4202080, 0 4px 16px #0008;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    #play-btn:hover { transform: scale(1.06); box-shadow: 0 0 70px #ff4040aa, 0 4px 24px #0008; }
+    #play-btn:active { transform: scale(0.96); }
+  </style>
+</head>
+<body>
+  <!-- Overlay shown until the user clicks PLAY -->
+  <div id="overlay">
+    <h1>RUST RACER</h1>
+    <div class="sub">open-world driving</div>
+    <div class="controls">
+      <div class="kv"><kbd>W</kbd><kbd>↑</kbd> Accelerate</div>
+      <div class="kv"><kbd>S</kbd><kbd>↓</kbd> Reverse</div>
+      <div class="kv"><kbd>A</kbd><kbd>←</kbd> Steer left</div>
+      <div class="kv"><kbd>D</kbd><kbd>→</kbd> Steer right</div>
+      <div class="kv"><kbd>Space</kbd> Brake</div>
+      <div class="kv"><kbd>R</kbd> Reset car</div>
+    </div>
+    <button id="play-btn">▶ &thinsp;PLAY</button>
+  </div>
+
+  <!-- Trunk replaces this with the compiled WASM loader -->
+  <link data-trunk rel="rust" data-target-name="rust_game" data-wasm-opt="z" />
+
+  <script>
+    document.getElementById('play-btn').addEventListener('click', function () {
+      document.getElementById('overlay').style.display = 'none';
+      // Attempt fullscreen on the canvas element
+      var el = document.querySelector('canvas') || document.documentElement;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+      if (req) req.call(el).catch(function(){});
+      // Synthetic resize so winit re-measures the canvas after fullscreen
+      window.dispatchEvent(new Event('resize'));
+    });
+  </script>
+</body>
+</html>
