@@ -12,5 +12,5 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(start)]
 pub fn wasm_main() {
     platform::init_wasm();
-    platform::run();
+    wasm_bindgen_futures::spawn_local(platform::web::run());
 }

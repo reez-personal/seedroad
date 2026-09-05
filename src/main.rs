@@ -5,5 +5,5 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     env_logger::init();
 
-    rust_game::platform::run();
+    seedroad::platform::run();
 }

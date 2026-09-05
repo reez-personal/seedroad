@@ -1,4 +1,7 @@
-// platform/mod.rs — game loop and winit ApplicationHandler.
+// platform/mod.rs — game loop and winit ApplicationHandler (native only).
+//
+// On WASM the winit event loop is not used.  All WASM game-loop code lives in
+// platform/web.rs, which is called directly from lib.rs via wasm_bindgen.
 
 use std::{rc::Rc, cell::RefCell, sync::Arc};
 
@@ -73,26 +76,16 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Guard: resumed() can be called more than once on some platforms.
+        // Only initialize on the first call.
+        if self.window.is_some() { return; }
+
         let attrs = Window::default_attributes()
             .with_title("Rust Racer — WASD/Arrows · Space=brake · Q/E=look · R=upright")
             .with_inner_size(winit::dpi::LogicalSize::new(1280u32, 720u32));
 
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
         self.window = Some(window.clone());
-
-        // ── WASM: insert canvas ───────────────────────────────────────────
-        #[cfg(target_arch = "wasm32")]
-        {
-            use winit::platform::web::WindowExtWebSys;
-            use wasm_bindgen::JsCast;
-            let web_win = web_sys::window().unwrap();
-            let body = web_win.document().unwrap().body().unwrap();
-            let canvas = window.canvas().unwrap();
-            canvas.set_width(1280); canvas.set_height(720);
-            let el: &web_sys::HtmlElement = canvas.unchecked_ref();
-            body.append_child(el).unwrap();
-            el.set_attribute("style", "width:100vw;height:100vh;display:block;").unwrap();
-        }
 
         // ── Native: synchronous init ──────────────────────────────────────
         #[cfg(not(target_arch = "wasm32"))]
@@ -141,62 +134,6 @@ impl ApplicationHandler for App {
                 grass_instances: initial_grass,
                 grass_built_at:  [spawn.0, spawn.1],
                 splash:          SplashSystem::new(),
-            });
-        }
-
-        // ── WASM: async init ──────────────────────────────────────────────
-        #[cfg(target_arch = "wasm32")]
-        {
-            let state_ref = self.state.clone();
-            let win_rnd   = window.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                let mut terrain = TerrainManager::new();
-                let win2 = win_rnd.clone();
-                let mut renderer = Renderer::new(win_rnd, &terrain.road).await;
-
-                {
-                    use winit::platform::web::WindowExtWebSys;
-                    if let Some(canvas) = win2.canvas() {
-                        let cw = canvas.width(); let ch = canvas.height();
-                        if cw > 0 && ch > 0 { renderer.resize(cw, ch); }
-                    }
-                }
-
-                let (w, h) = (renderer.surface_width(), renderer.surface_height());
-
-                let chunk_info: Vec<(i32,i32,usize,Option<usize>)> = terrain.chunks().iter()
-                    .map(|(&(cx,cz),cd)| (cx,cz,cd.mesh_slot,cd.water_slot))
-                    .collect();
-                for (cx,cz,slot,water_slot) in &chunk_info {
-                    let heights = terrain.chunk(&(*cx,*cz)).unwrap().heights.clone();
-                    renderer.upload_terrain_chunk(*slot, *cx, *cz, &heights);
-                    if let Some(ws) = water_slot {
-                        renderer.upload_water_chunk(*ws, *cx, *cz, &heights);
-                    }
-                }
-
-                let physics  = PhysicsWorld::new(&terrain);
-                let spawn = terrain.spawn_point();
-                let spawn_pos = cgmath::Vector3::new(spawn.0, 0.0, spawn.1);
-                let env_cmds = environment_draw_cmds(&terrain, spawn_pos);
-
-                let initial_grass = build_grass_instances(&terrain, spawn_pos);
-                renderer.upload_grass_instances(&initial_grass);
-
-                *state_ref.borrow_mut() = Some(AppState {
-                    window,
-                    camera: Camera::new(w, h),
-                    renderer,
-                    physics,
-                    input:         InputState::default(),
-                    env_cmds,
-                    env_built_at:  [spawn.0, spawn.1],
-                    terrain,
-                    grass_instances: initial_grass,
-                    grass_built_at:  [spawn.0, spawn.1],
-                    splash:          SplashSystem::new(),
-                });
-                win2.request_redraw();
             });
         }
     }
@@ -305,13 +242,11 @@ impl ApplicationHandler for App {
                 s.splash.update(dt, &wheel_data, &s.terrain);
                 let splash_instances = s.splash.instances();
                 // Wetness: ramp up while actively splashing, slow decay when dry.
-                // Rate proportional to live particle count so bigger spray = wetter.
                 let pc = s.splash.particle_count();
                 if pc > 0 {
                     let intensity = (pc as f32 / 200.0).min(1.0);
                     s.renderer.wetness = (s.renderer.wetness + dt * 2.0 * intensity).min(1.0);
                 } else {
-                    // Dry off over ~25 seconds.
                     s.renderer.wetness = (s.renderer.wetness - dt * 0.04).max(0.0);
                 }
                 s.renderer.upload_splash_instances(&splash_instances);
@@ -365,15 +300,11 @@ pub fn init_wasm() {
 pub fn run() {
     let event_loop = EventLoop::new().expect("event loop");
 
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let mut app = App::new();
-        event_loop.run_app(&mut app).expect("run");
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        use winit::platform::web::EventLoopExtWebSys;
-        event_loop.spawn_app(App::new());
-    }
+    let mut app = App::new();
+    event_loop.run_app(&mut app).expect("run");
 }
+
+// ── WASM game loop (bypasses winit entirely) ──────────────────────────────────
+
+#[cfg(target_arch = "wasm32")]
+pub mod web;

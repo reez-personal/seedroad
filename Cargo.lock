@@ -1912,25 +1912,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-game"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "cgmath",
- "console_error_panic_hook",
- "console_log",
- "env_logger",
- "log",
- "pollster",
- "rapier3d",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2024,6 +2005,26 @@ dependencies = [
  "memmap2",
  "smithay-client-toolkit",
  "tiny-skia",
+]
+
+[[package]]
+name = "seedroad"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "cgmath",
+ "console_error_panic_hook",
+ "console_log",
+ "env_logger",
+ "js-sys",
+ "log",
+ "pollster",
+ "rapier3d",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]

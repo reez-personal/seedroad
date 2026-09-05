@@ -16,6 +16,21 @@ pub struct InputState {
 }
 
 impl InputState {
+    #[cfg(target_arch = "wasm32")]
+    pub fn handle_web_key(&mut self, code: &str, pressed: bool) {
+        match code {
+            "KeyW" | "ArrowUp"    => self.forward    = pressed,
+            "KeyS" | "ArrowDown"  => self.backward   = pressed,
+            "KeyA" | "ArrowLeft"  => self.left       = pressed,
+            "KeyD" | "ArrowRight" => self.right      = pressed,
+            "Space"               => self.brake      = pressed,
+            "KeyR"                => self.upright    = pressed,
+            "KeyQ"                => self.look_left  = pressed,
+            "KeyE"                => self.look_right = pressed,
+            _ => {}
+        }
+    }
+
     pub fn handle_key_event(&mut self, event: &KeyEvent) {
         let pressed = event.state == ElementState::Pressed;
         match &event.logical_key {
