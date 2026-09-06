@@ -67,7 +67,10 @@ impl PhysicsWorld {
         let spawn_y = terrain.height_at(spawn_x, spawn_z) + 1.50;
 
         let (fwd_x, fwd_z) = terrain.road.direction_at(0.0);
-        let spawn_angle = fwd_x.atan2(-fwd_z); // so car -Z axis aligns with road forward
+        // R_y(θ) applied to physics -Z gives (-sinθ, 0, -cosθ).
+        // For that to equal road forward (fwd_x, fwd_z):
+        //   sinθ = -fwd_x,  cosθ = -fwd_z  →  θ = atan2(-fwd_x, -fwd_z).
+        let spawn_angle = (-fwd_x).atan2(-fwd_z);
         let spawn_rot = NaQuaternion::from_axis_angle(
             &rapier3d::na::Unit::new_normalize(vector![0.0, 1.0, 0.0]),
             spawn_angle,
@@ -78,8 +81,9 @@ impl PhysicsWorld {
                 Translation::new(spawn_x, spawn_y, spawn_z),
                 spawn_rot,
             ))
-            .linear_damping(0.08)
-            .angular_damping(2.0) // high: prevents nose-up flips
+            .linear_damping(0.12)  // light drag — reduces residual bounce without killing top speed
+            .angular_damping(3.0)  // prevents nose-up flips
+            .ccd_enabled(true)     // prevents tunnelling through chunk seams
             .build();
         let chassis_handle = rbs.insert(chassis_rb);
 
@@ -94,9 +98,13 @@ impl PhysicsWorld {
         let mut vehicle = DynamicRayCastVehicleController::new(chassis_handle);
 
         let tuning = WheelTuning {
-            suspension_stiffness: 100.0,
-            suspension_damping:   5.0,
-            ..WheelTuning::default()
+            suspension_stiffness:    35.0, // moderately stiff spring
+            suspension_compression:   0.83, // default
+            suspension_damping:       4.0,  // overdamped vs default 0.88 — suppresses bounce
+            max_suspension_travel:    0.45, // keep < SUSPENSION_REST so wheels never lose ground contact
+            side_friction_stiffness:  1.0,  // standard lateral grip
+            friction_slip:           10.8,  // standard longitudinal grip
+            max_suspension_force:  6000.0,  // default
         };
 
         for &(wx, wz) in &WHEEL_OFFSETS {
@@ -130,8 +138,8 @@ impl PhysicsWorld {
             spawn_angle,
         };
 
-        // Warm up — settle car onto terrain
-        for _ in 0..60 { world.step(1.0 / 60.0); }
+        // Warm up — settle car onto terrain (120 frames × 4 substeps = 8 sim-seconds).
+        for _ in 0..120 { world.step(1.0 / 60.0); }
         world
     }
 
@@ -155,11 +163,11 @@ impl PhysicsWorld {
 
     pub fn apply_controls(&mut self, throttle: f32, steering: f32, brake: f32) {
         let speed = self.rigid_body_set[self.chassis_handle].linvel().magnitude();
-        let max_speed   = 40.0_f32; // ~145 km/h cap
+        let max_speed   = 50.0_f32; // ~180 km/h cap
         let speed_norm  = (speed / max_speed).min(1.0);
         let torque_f    = (1.0 - speed_norm * speed_norm).max(0.0);
-        // AWD: 1750 N per wheel (all 4), balanced front/rear — no nose-up flip
-        let per_wheel   = throttle * 1750.0 * torque_f;
+        // AWD: 2400 N per wheel (all 4), balanced front/rear
+        let per_wheel   = throttle * 2400.0 * torque_f;
 
         let wheels = self.vehicle.wheels_mut();
         wheels[0].steering    = steering;
@@ -172,31 +180,37 @@ impl PhysicsWorld {
     }
 
     pub fn step(&mut self, dt: f32) {
-        self.integration_params.dt = dt.clamp(1.0 / 240.0, 1.0 / 20.0);
+        // 4 substeps per frame: each substep has a 4× smaller dt.
+        // Smaller dt makes the spring-damper integration numerically stable —
+        // the suspension no longer oscillates due to Euler integration error.
+        const SUBSTEPS: u32 = 4;
+        let sub_dt = (dt / SUBSTEPS as f32).clamp(1.0 / 960.0, 1.0 / 80.0);
+        self.integration_params.dt = sub_dt;
 
-        self.vehicle.update_vehicle(
-            dt,
-            &mut self.rigid_body_set,
-            &self.collider_set,
-            &self.query_pipeline,
-            QueryFilter::default().exclude_rigid_body(self.chassis_handle),
-        );
-
-        self.physics_pipeline.step(
-            &self.gravity,
-            &self.integration_params,
-            &mut self.island_manager,
-            &mut self.broad_phase,
-            &mut self.narrow_phase,
-            &mut self.rigid_body_set,
-            &mut self.collider_set,
-            &mut self.impulse_joints,
-            &mut self.multibody_joints,
-            &mut self.ccd_solver,
-            Some(&mut self.query_pipeline),
-            &(),
-            &(),
-        );
+        for _ in 0..SUBSTEPS {
+            self.vehicle.update_vehicle(
+                sub_dt,
+                &mut self.rigid_body_set,
+                &self.collider_set,
+                &self.query_pipeline,
+                QueryFilter::default().exclude_rigid_body(self.chassis_handle),
+            );
+            self.physics_pipeline.step(
+                &self.gravity,
+                &self.integration_params,
+                &mut self.island_manager,
+                &mut self.broad_phase,
+                &mut self.narrow_phase,
+                &mut self.rigid_body_set,
+                &mut self.collider_set,
+                &mut self.impulse_joints,
+                &mut self.multibody_joints,
+                &mut self.ccd_solver,
+                Some(&mut self.query_pipeline),
+                &(),
+                &(),
+            );
+        }
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -281,7 +295,7 @@ impl PhysicsWorld {
     pub fn upright_in_place(&mut self, terrain: &TerrainManager) {
         let pos   = self.car_position();
         let fwd   = self.car_forward();
-        let yaw   = fwd.x.atan2(-fwd.z); // preserve heading direction
+        let yaw   = (-fwd.x).atan2(-fwd.z); // preserve heading direction (same formula as spawn)
         let rot   = NaQuaternion::from_axis_angle(
             &rapier3d::na::Unit::new_normalize(vector![0.0, 1.0, 0.0]),
             yaw,

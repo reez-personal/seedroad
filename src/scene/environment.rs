@@ -180,45 +180,61 @@ pub fn road_ahead_cmds(car_pos: cgmath::Vector3<f32>, terrain: &TerrainManager) 
     // Find nearest road point to car
     let (_, _, best_dist, _) = road.nearest_to(car_pos.x, car_pos.z);
 
-    let mut out: Vec<DrawCmd> = Vec::with_capacity(120);
-    let steps  = 80usize;
-    let stride = 10.0_f32; // 10 m per step → 800 m ahead total
+    // Constants for stable world-space patterns.
+    // All phases use absolute arc-length modulo so the pattern is fixed in
+    // world-space and never slides as the car moves.
+    const STRIDE:      f32 = 4.0;   // metres per iteration step
+    const LOOK_AHEAD:  f32 = 600.0; // metres of road to draw ahead
+    const DASH_PERIOD: f32 = 40.0;  // full on+off cycle length (20 m on, 20 m off)
+    const DASH_ON:     f32 = 20.0;  // "on" portion of cycle
+    const POST_EVERY:  f32 = 200.0; // metres between yellow edge posts
 
-    for step in 0..steps {
-        let d0 = best_dist + step as f32 * stride;
-        let d1 = d0 + stride;
-        if d0 >= road.total_dist() { break; }
-        let d1 = d1.min(road.total_dist());
+    // Quantise start to the absolute grid so the loop always hits the same
+    // world-arc-length values regardless of where the car is.
+    let start = (best_dist / STRIDE).floor() * STRIDE;
+    let end   = (start + LOOK_AHEAD).min(road.total_dist());
 
+    let mut out: Vec<DrawCmd> = Vec::with_capacity(200);
+    let mut d0 = start;
+    while d0 < end {
+        let d1  = (d0 + STRIDE).min(road.total_dist());
         let (x0, z0) = road.position_at(d0);
         let (x1, z1) = road.position_at(d1);
-        let y0 = terrain.height_at(x0, z0) + 0.06;
-        let y1 = terrain.height_at(x1, z1) + 0.06;
+        let y0 = terrain.height_at(x0, z0) + 0.16; // above road mesh (+0.12) + margin
+        let y1 = terrain.height_at(x1, z1) + 0.16;
 
-        let dx = x1 - x0;
-        let dz = z1 - z0;
+        let dx  = x1 - x0;
+        let dz  = z1 - z0;
         let len = (dx * dx + dz * dz).sqrt().max(0.001);
-        let rx = -dz / len;
-        let rz =  dx / len;
+        let rx  = -dz / len;
+        let rz  =  dx / len;
 
-        // Dashed centre line
-        if step % 4 < 2 {
+        // Centre-line dashes: stable pattern based on absolute distance.
+        let dash_phase = d0 % DASH_PERIOD;
+        if dash_phase < DASH_ON {
             let mx = (x0 + x1) * 0.5;
             let mz = (z0 + z1) * 0.5;
             let my = (y0 + y1) * 0.5;
-            out.push(oriented_cyl(Vector3::new(mx, my, mz), Vector3::new(x1, y1, z1), 0.15, LINE_WHITE));
+            out.push(oriented_cyl(
+                Vector3::new(mx, my, mz),
+                Vector3::new(x1, y1, z1),
+                0.15, LINE_WHITE,
+            ));
         }
 
-        // Yellow edge posts every 20 steps
-        if step % 20 == 0 {
+        // Yellow edge posts at fixed 200 m world intervals (stable in world space).
+        let post_phase = d0 % POST_EVERY;
+        if post_phase < STRIDE {
             let post_h = 0.8_f32;
             let ox = rx * 6.8;
             let oz = rz * 6.8;
             let py  = terrain.height_at(x0 + ox, z0 + oz);
             let py2 = terrain.height_at(x0 - ox, z0 - oz);
-            out.push(vcyl(x0 + ox, py  + post_h * 0.5, z0 + oz, 0.06, post_h, MARKER_YLW));
-            out.push(vcyl(x0 - ox, py2 + post_h * 0.5, z0 - oz, 0.06, post_h, MARKER_YLW));
+            out.push(vcyl(x0 + ox,  py  + post_h * 0.5, z0 + oz,  0.06, post_h, MARKER_YLW));
+            out.push(vcyl(x0 - ox,  py2 + post_h * 0.5, z0 - oz,  0.06, post_h, MARKER_YLW));
         }
+
+        d0 += STRIDE;
     }
 
     out

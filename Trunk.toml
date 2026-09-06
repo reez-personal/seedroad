@@ -5,7 +5,7 @@
 # Output directory for the built WASM + JS assets.
 dist = "dist"
 # Public URL base (change to "/rust-game/" if deploying to a sub-path).
-public_url = "/"
+public_url = "./"
 
 [serve]
 # Local dev server address.

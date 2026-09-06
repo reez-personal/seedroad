@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rust Racer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0" />
+  <title>Seedroad</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #07080f; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
-    canvas { display: block; width: 100vw; height: 100vh; }
+    body { background: #07080f; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; touch-action: none; }
+    canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
 
     #overlay {
       position: fixed; inset: 0; z-index: 20;
@@ -46,12 +46,47 @@
     }
     #play-btn:hover { transform: scale(1.06); box-shadow: 0 0 70px #ff4040aa, 0 4px 24px #0008; }
     #play-btn:active { transform: scale(0.96); }
+
+    /* ── Mobile touch HUD ───────────────────────────────────────────────────── */
+    #touch-hud {
+      display: none;
+      position: fixed; inset: 0; z-index: 10;
+      pointer-events: none; /* pass-through except on buttons */
+    }
+    .touch-btn {
+      position: absolute;
+      background: rgba(255,255,255,0.12);
+      border: 2px solid rgba(255,255,255,0.25);
+      border-radius: 50%;
+      color: rgba(255,255,255,0.70);
+      font-size: 1.6rem;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: all;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: background 0.08s;
+    }
+    .touch-btn:active, .touch-btn.pressed {
+      background: rgba(255,255,255,0.30);
+    }
+
+    /* Steering: bottom-left cluster */
+    #ctrl-left  { width: 72px; height: 72px; left: 24px;  bottom: 28px; }
+    #ctrl-right { width: 72px; height: 72px; left: 112px; bottom: 28px; }
+
+    /* Gas / brake: bottom-right */
+    #ctrl-gas   { width: 88px; height: 88px; right: 24px;  bottom: 28px; background: rgba(80,200,80,0.18); border-color: rgba(80,200,80,0.4); }
+    #ctrl-brake { width: 64px; height: 64px; right: 124px; bottom: 44px; background: rgba(200,60,60,0.18); border-color: rgba(200,60,60,0.4); }
+
+    /* Reset: top-right corner */
+    #ctrl-reset { width: 52px; height: 52px; right: 20px; top: 20px; font-size: 1.1rem; border-radius: 12px; }
   </style>
 </head>
 <body>
   <!-- Overlay shown until the user clicks PLAY -->
   <div id="overlay">
-    <h1>RUST RACER</h1>
+    <h1>SEEDROAD</h1>
     <div class="sub">open-world driving</div>
     <div class="controls">
       <div class="kv"><kbd>W</kbd><kbd>↑</kbd> Accelerate</div>
@@ -64,12 +99,27 @@
     <button id="play-btn">▶ &thinsp;PLAY</button>
   </div>
 
+  <!-- Touch controls (visible on mobile after PLAY) -->
+  <div id="touch-hud">
+    <div class="touch-btn" id="ctrl-left">◀</div>
+    <div class="touch-btn" id="ctrl-right">▶</div>
+    <div class="touch-btn" id="ctrl-gas">▲</div>
+    <div class="touch-btn" id="ctrl-brake">■</div>
+    <div class="touch-btn" id="ctrl-reset">R</div>
+  </div>
+
   <!-- Trunk replaces this with the compiled WASM loader -->
   <link data-trunk rel="rust" data-target-name="seedroad" data-wasm-opt="z" />
 
   <script>
     document.getElementById('play-btn').addEventListener('click', function () {
       document.getElementById('overlay').style.display = 'none';
+
+      // Show touch HUD only on touch-capable devices
+      if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
+        document.getElementById('touch-hud').style.display = 'block';
+      }
+
       // Attempt fullscreen on the canvas element
       var el = document.querySelector('canvas') || document.documentElement;
       var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;

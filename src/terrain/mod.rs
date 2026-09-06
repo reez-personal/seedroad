@@ -168,7 +168,7 @@ impl RoadSpline {
                 let side = (-1.0 + s * 2.0) * HALF_W;
                 let wx   = cx + rx * side;
                 let wz   = cz + rz * side;
-                let wy   = self.height_at(d) + 0.05;
+                let wy   = self.height_at(d) + 0.12;
                 verts.push(Vertex {
                     position: [wx, wy, wz],
                     normal:   [0.0, 1.0, 0.0],

@@ -90,7 +90,62 @@ pub async fn run() {
         cb.forget();
     }
 
-    // ── 3. Game initialisation ────────────────────────────────────────────────
+    // ── 3. Touch controls (mobile) ────────────────────────────────────────────
+    // Each button sends touchstart → set flag true, touchend/cancel → false.
+    {
+        let doc = web_sys::window().unwrap().document().unwrap();
+
+        // (id, start-setter, end-setter)
+        struct Btn { id: &'static str }
+        let buttons: &[(&str, fn(&mut InputState, bool))] = &[
+            ("ctrl-left",  |s, v| s.left     = v),
+            ("ctrl-right", |s, v| s.right    = v),
+            ("ctrl-gas",   |s, v| s.forward  = v),
+            ("ctrl-brake", |s, v| s.brake    = v),
+            ("ctrl-reset", |s, v| s.upright  = v),
+        ];
+
+        for &(id, setter) in buttons {
+            if let Some(el) = doc.get_element_by_id(id) {
+                use wasm_bindgen::JsCast;
+                let el: web_sys::HtmlElement = el.dyn_into().unwrap();
+
+                // touchstart → true
+                let inp = input.clone();
+                let cb = Closure::<dyn FnMut(web_sys::TouchEvent)>::new(
+                    move |e: web_sys::TouchEvent| {
+                        e.prevent_default();
+                        setter(&mut inp.borrow_mut(), true);
+                    },
+                );
+                el.add_event_listener_with_callback("touchstart", cb.as_ref().unchecked_ref()).unwrap();
+                cb.forget();
+
+                // touchend → false
+                let inp = input.clone();
+                let cb = Closure::<dyn FnMut(web_sys::TouchEvent)>::new(
+                    move |e: web_sys::TouchEvent| {
+                        e.prevent_default();
+                        setter(&mut inp.borrow_mut(), false);
+                    },
+                );
+                el.add_event_listener_with_callback("touchend", cb.as_ref().unchecked_ref()).unwrap();
+                cb.forget();
+
+                // touchcancel → false
+                let inp = input.clone();
+                let cb = Closure::<dyn FnMut(web_sys::TouchEvent)>::new(
+                    move |_: web_sys::TouchEvent| {
+                        setter(&mut inp.borrow_mut(), false);
+                    },
+                );
+                el.add_event_listener_with_callback("touchcancel", cb.as_ref().unchecked_ref()).unwrap();
+                cb.forget();
+            }
+        }
+    }
+
+    // ── 4. Game initialisation ────────────────────────────────────────────────
     let mut terrain = TerrainManager::new();
     let mut renderer = Renderer::new_wasm(canvas.clone(), &terrain.road).await;
     let (w, h) = (renderer.surface_width(), renderer.surface_height());
@@ -193,7 +248,7 @@ fn game_tick(s: &mut AppState, dt: f32) {
     }
 
     let throttle = if s.input.forward { 1.0 } else if s.input.backward { -0.6 } else { 0.0 };
-    let steer    = if s.input.left  { 0.45 } else if s.input.right { -0.45 } else { 0.0 };
+    let steer    = if s.input.left  {  0.50 } else if s.input.right { -0.50 } else { 0.0 };
     let brake    = if s.input.brake { 1.0 } else { 0.0 };
 
     s.camera.time += dt;

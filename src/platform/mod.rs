@@ -81,7 +81,7 @@ impl ApplicationHandler for App {
         if self.window.is_some() { return; }
 
         let attrs = Window::default_attributes()
-            .with_title("Rust Racer — WASD/Arrows · Space=brake · Q/E=look · R=upright")
+            .with_title("Seedroad — WASD/Arrows · Space=brake · Q/E=look · R=upright")
             .with_inner_size(winit::dpi::LogicalSize::new(1280u32, 720u32));
 
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
@@ -177,8 +177,8 @@ impl ApplicationHandler for App {
 
                 let throttle = if s.input.forward   {  1.0 }
                                else if s.input.backward { -0.6 } else { 0.0 };
-                let steer    = if s.input.left  { 0.45 }
-                               else if s.input.right { -0.45 } else { 0.0 };
+                let steer    = if s.input.left  {  0.50 }
+                               else if s.input.right { -0.50 } else { 0.0 };
                 let brake    = if s.input.brake { 1.0 } else { 0.0 };
 
                 s.camera.time += dt;

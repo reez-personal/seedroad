@@ -61,11 +61,20 @@ impl Camera {
         let desired_eye    = car_pos + orbit * 9.0 + Vector3::new(0.0, 3.5, 0.0);
         let desired_target = car_pos + Vector3::new(0.0, 0.8, 0.0);
 
-        // Exponential smoothing
-        let t_eye    = (1.0 - (-8.0_f32 * dt).exp()).min(1.0);
-        let t_target = (1.0 - (-12.0_f32 * dt).exp()).min(1.0);
-        self.eye    += (desired_eye    - self.eye)    * t_eye;
-        self.target += (desired_target - self.target) * t_target;
+        // XZ tracks quickly so the camera swings around corners well.
+        // Y tracks much more slowly — high-frequency vertical bounce (suspension
+        // oscillation) is filtered out and never transferred to the view.
+        let t_xz     = (1.0 - (-10.0_f32 * dt).exp()).min(1.0);
+        let t_eye_y  = (1.0 - ( -3.0_f32 * dt).exp()).min(1.0);
+        let t_look_y = (1.0 - ( -3.0_f32 * dt).exp()).min(1.0);
+
+        self.eye.x  += (desired_eye.x - self.eye.x) * t_xz;
+        self.eye.z  += (desired_eye.z - self.eye.z) * t_xz;
+        self.eye.y  += (desired_eye.y - self.eye.y) * t_eye_y;
+
+        self.target.x += (desired_target.x - self.target.x) * t_xz;
+        self.target.z += (desired_target.z - self.target.z) * t_xz;
+        self.target.y += (desired_target.y - self.target.y) * t_look_y;
     }
 
     pub fn build_uniform(&self) -> CameraUniform {
