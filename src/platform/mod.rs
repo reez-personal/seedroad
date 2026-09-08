@@ -185,6 +185,13 @@ impl ApplicationHandler for App {
                 s.physics.apply_controls(throttle, steer, brake);
                 s.physics.step(dt);
 
+                // ── Floor clamp — prevents chassis sinking into terrain ───────
+                {
+                    let p = s.physics.car_position();
+                    let floor_y = s.terrain.height_at(p.x, p.z);
+                    s.physics.clamp_to_floor(floor_y);
+                }
+
                 // ── Chunk streaming ───────────────────────────────────────────
                 let car_pos = s.physics.car_position();
                 let (added, removed) = s.terrain.update(car_pos.x, car_pos.z);

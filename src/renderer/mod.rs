@@ -107,6 +107,9 @@ pub struct Renderer {
     droplet_params:   wgpu::Buffer,
     /// Accumulated wetness [0,1] — written by platform each frame.
     pub wetness:      f32,
+    /// Whether to use the screen-texture intermediate pass (required for droplet effect).
+    /// True on native and on WASM/WebGPU. False on WASM/WebGL2 which lacks memory barriers.
+    use_screen_pass:  bool,
 }
 
 impl Renderer {
@@ -438,6 +441,7 @@ impl Renderer {
             droplet_bg,
             droplet_params,
             wetness: 0.0,
+            use_screen_pass: true, // native always supports render-to-texture
         }
     }
 
@@ -751,6 +755,9 @@ impl Renderer {
             droplet_bg,
             droplet_params,
             wetness: 0.0,
+            // WebGPU supports render-to-texture + sample in the same frame.
+            // WebGL2 does not (no memory barrier) — skip the screen pass there.
+            use_screen_pass: adapter.get_info().backend == wgpu::Backend::BrowserWebGpu,
         }
     }
 
@@ -806,8 +813,10 @@ impl Renderer {
     pub fn resize(&mut self, w: u32, h: u32) {
         if w == 0 || h == 0 { return; }
         let max_dim = self.device.limits().max_texture_dimension_2d;
-        self.surface_config.width  = w.min(max_dim);
-        self.surface_config.height = h.min(max_dim);
+        let w = w.min(max_dim);
+        let h = h.min(max_dim);
+        self.surface_config.width  = w;
+        self.surface_config.height = h;
         self.surface.configure(&self.device, &self.surface_config);
         let (dt, dv) = depth_texture(&self.device, w, h, MSAA_SAMPLES);
         self.depth_texture = dt;
@@ -815,7 +824,7 @@ impl Renderer {
         if MSAA_SAMPLES > 1 {
             let tex = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("msaa"),
-                size: wgpu::Extent3d { width: w.min(max_dim), height: h.min(max_dim), depth_or_array_layers: 1 },
+                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
                 mip_level_count: 1, sample_count: MSAA_SAMPLES,
                 dimension: wgpu::TextureDimension::D2,
                 format: self.surface_config.format,
@@ -828,7 +837,7 @@ impl Renderer {
         }
         // Recreate screen color texture and droplet bind group at new size.
         let fmt = self.surface_config.format;
-        let (st, sv) = screen_color_texture(&self.device, w.min(max_dim), h.min(max_dim), fmt);
+        let (st, sv) = screen_color_texture(&self.device, w, h, fmt);
         self.screen_tex  = st;
         self.screen_view = sv;
         self.droplet_bg  = create_droplet_bind_group(
@@ -890,16 +899,11 @@ impl Renderer {
 
         let output = self.surface.get_current_texture()?;
         let swapchain_view = output.texture.create_view(&Default::default());
-        // On native: scene renders into screen_view, then the droplet post-process
-        // reads it and writes to the swapchain.
-        // On WASM/WebGL2: there is no glMemoryBarrier, so wgpu's GL backend cannot
-        // guarantee the intermediate texture is flushed between passes — sampling it
-        // in the droplet pass would read stale (black) data.  Render directly to
-        // the swapchain instead and skip the droplet pass entirely.
-        #[cfg(not(target_arch = "wasm32"))]
-        let scene_target = &self.screen_view;
-        #[cfg(target_arch = "wasm32")]
-        let scene_target = &swapchain_view;
+        // When use_screen_pass is true (native + WASM/WebGPU): scene renders into
+        // screen_view, then the droplet post-process reads it and blits to the swapchain.
+        // When false (WASM/WebGL2): render directly to swapchain — WebGL2 has no
+        // memory barrier so sampling screen_view mid-frame reads stale/black data.
+        let scene_target = if self.use_screen_pass { &self.screen_view } else { &swapchain_view };
         let mut enc = self.device.create_command_encoder(
             &wgpu::CommandEncoderDescriptor { label: Some("enc") });
 
@@ -1009,12 +1013,10 @@ impl Renderer {
         }
 
         // ── Droplet post-process pass ─────────────────────────────────────────────
-        // Native only: on WASM the scene renders directly to the swapchain
-        // (scene_target == swapchain_view) so screen_view is never written.
-        // Running the droplet pass would sample the empty screen_view and
-        // overwrite the swapchain with black.
-        #[cfg(not(target_arch = "wasm32"))]
-        {
+        // Only runs when use_screen_pass is true (native + WASM/WebGPU).
+        // On WASM/WebGL2 the scene already went straight to swapchain_view so
+        // there is nothing to post-process.
+        if self.use_screen_pass {
             let mut dp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("droplets"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1027,7 +1029,7 @@ impl Renderer {
             });
             dp.set_pipeline(&self.droplet_pipeline);
             dp.set_bind_group(0, &self.droplet_bg, &[]);
-            dp.draw(0..3, 0..1);  // fullscreen triangle from vertex_index
+            dp.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(enc.finish()));

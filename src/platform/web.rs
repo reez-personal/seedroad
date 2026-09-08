@@ -47,10 +47,10 @@ pub async fn run() {
         .unwrap();
 
     let win = web_sys::window().unwrap();
-    let vw = win.inner_width().unwrap().as_f64().unwrap() as u32;
-    let vh = win.inner_height().unwrap().as_f64().unwrap() as u32;
-    canvas.set_width(vw.max(1));
-    canvas.set_height(vh.max(1));
+    let vw  = (win.inner_width().unwrap().as_f64().unwrap()  as u32).max(1);
+    let vh  = (win.inner_height().unwrap().as_f64().unwrap() as u32).max(1);
+    canvas.set_width(vw);
+    canvas.set_height(vh);
 
     let el: &web_sys::HtmlElement = canvas.unchecked_ref();
     doc.body().unwrap().append_child(el).unwrap();
@@ -101,6 +101,7 @@ pub async fn run() {
             ("ctrl-left",  |s, v| s.left     = v),
             ("ctrl-right", |s, v| s.right    = v),
             ("ctrl-gas",   |s, v| s.forward  = v),
+            ("ctrl-back",  |s, v| s.backward = v),
             ("ctrl-brake", |s, v| s.brake    = v),
             ("ctrl-reset", |s, v| s.upright  = v),
         ];
@@ -185,17 +186,37 @@ pub async fn run() {
         splash:          SplashSystem::new(),
     }));
 
+    // ── Window resize handler ─────────────────────────────────────────────────
+    // Only resizes the canvas element here — no state borrow, so no RefCell
+    // conflict with the rAF loop.  game_tick() detects the canvas size change
+    // and calls renderer/camera resize on the next frame.
+    {
+        let canvas_r = canvas.clone();
+        let cb = Closure::<dyn FnMut()>::new(move || {
+            let win = web_sys::window().unwrap();
+            let nw  = (win.inner_width().unwrap().as_f64().unwrap()  as u32).max(1);
+            let nh  = (win.inner_height().unwrap().as_f64().unwrap() as u32).max(1);
+            canvas_r.set_width(nw);
+            canvas_r.set_height(nh);
+        });
+        web_sys::window().unwrap()
+            .add_event_listener_with_callback("resize", cb.as_ref().unchecked_ref())
+            .unwrap();
+        cb.forget();
+    }
+
     // ── 4. requestAnimationFrame loop ─────────────────────────────────────────
     //
     // Classic Rc/RefCell/Closure self-referential rAF pattern:
     // `raf` owns the Closure; `raf_inner` is cloned into the closure itself
     // so it can re-schedule the next frame.
     let raf: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
-    let raf_inner = raf.clone();
+    let raf_inner  = raf.clone();
     let last_ts:   Rc<RefCell<f64>> = Rc::new(RefCell::new(0.0));
     let state_raf  = state.clone();
     let input_raf  = input.clone();
     let last_ts2   = last_ts.clone();
+    let canvas_raf = canvas.clone(); // used to detect resize inside the borrow
 
     *raf.borrow_mut() = Some(Closure::new(move |ts: f64| {
         // ── dt ────────────────────────────────────────────────────────────────
@@ -212,6 +233,13 @@ pub async fn run() {
         // ── sync input, tick ──────────────────────────────────────────────────
         {
             let mut s = state_raf.borrow_mut();
+            // Resize renderer/camera if the canvas was resized by the window handler.
+            let cw = canvas_raf.width();
+            let ch = canvas_raf.height();
+            if cw != s.renderer.surface_width() || ch != s.renderer.surface_height() {
+                s.renderer.resize(cw, ch);
+                s.camera.resize(cw, ch);
+            }
             s.input = input_raf.borrow().clone();
             game_tick(&mut s, dt);
         }
@@ -254,6 +282,13 @@ fn game_tick(s: &mut AppState, dt: f32) {
     s.camera.time += dt;
     s.physics.apply_controls(throttle, steer, brake);
     s.physics.step(dt);
+
+    // ── Floor clamp — prevents chassis sinking into terrain ──────────────────
+    {
+        let p = s.physics.car_position();
+        let floor_y = s.terrain.height_at(p.x, p.z);
+        s.physics.clamp_to_floor(floor_y);
+    }
 
     // ── Chunk streaming ───────────────────────────────────────────────────────
     let car_pos = s.physics.car_position();

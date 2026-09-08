@@ -81,9 +81,9 @@ impl PhysicsWorld {
                 Translation::new(spawn_x, spawn_y, spawn_z),
                 spawn_rot,
             ))
-            .linear_damping(0.12)  // light drag — reduces residual bounce without killing top speed
-            .angular_damping(3.0)  // prevents nose-up flips
-            .ccd_enabled(true)     // prevents tunnelling through chunk seams
+            .linear_damping(0.12)
+            .angular_damping(6.0)  // strong rotational damping — prevents nose-dive on landing
+            .ccd_enabled(true)
             .build();
         let chassis_handle = rbs.insert(chassis_rb);
 
@@ -98,13 +98,13 @@ impl PhysicsWorld {
         let mut vehicle = DynamicRayCastVehicleController::new(chassis_handle);
 
         let tuning = WheelTuning {
-            suspension_stiffness:    35.0, // moderately stiff spring
-            suspension_compression:   0.83, // default
-            suspension_damping:       4.0,  // overdamped vs default 0.88 — suppresses bounce
-            max_suspension_travel:    0.45, // keep < SUSPENSION_REST so wheels never lose ground contact
-            side_friction_stiffness:  1.0,  // standard lateral grip
-            friction_slip:           10.8,  // standard longitudinal grip
-            max_suspension_force:  6000.0,  // default
+            suspension_stiffness:    55.0,  // stiffer spring resists hard landings
+            suspension_compression:   1.80, // high compression damping absorbs impact faster
+            suspension_damping:       5.0,  // rebound damping
+            max_suspension_travel:    0.22, // short travel — wheels can't compress far enough to clip ground
+            side_friction_stiffness:  1.0,
+            friction_slip:           10.8,
+            max_suspension_force:  9000.0,  // higher force limit to match stiffer spring
         };
 
         for &(wx, wz) in &WHEEL_OFFSETS {
@@ -210,6 +210,24 @@ impl PhysicsWorld {
                 &(),
                 &(),
             );
+        }
+    }
+
+    /// Hard floor clamp: if the chassis sinks below terrain + clearance, push it back up.
+    /// Called every frame by the platform after step(). Does not reset velocity unless
+    /// the car is actively moving downward into the ground.
+    pub fn clamp_to_floor(&mut self, floor_y: f32) {
+        // Chassis centre must stay at least (CHASSIS_HALF_H + wheel_radius + margin) above ground.
+        const MIN_CLEARANCE: f32 = CHASSIS_HALF_H + WHEEL_RADIUS + 0.10;
+        let min_y = floor_y + MIN_CLEARANCE;
+        let rb = &mut self.rigid_body_set[self.chassis_handle];
+        let t = *rb.translation();
+        if t.y < min_y {
+            rb.set_translation(vector![t.x, min_y, t.z], true);
+            let v = *rb.linvel();
+            if v.y < 0.0 {
+                rb.set_linvel(vector![v.x, 0.0, v.z], true);
+            }
         }
     }
 

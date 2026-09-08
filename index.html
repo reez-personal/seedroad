@@ -9,6 +9,7 @@
     body { background: #07080f; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; touch-action: none; }
     canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
 
+    /* ── Splash / overlay ───────────────────────────────────────────────────── */
     #overlay {
       position: fixed; inset: 0; z-index: 20;
       display: flex; flex-direction: column;
@@ -44,47 +45,107 @@
       box-shadow: 0 0 40px #d4202080, 0 4px 16px #0008;
       transition: transform 0.12s, box-shadow 0.12s;
     }
-    #play-btn:hover { transform: scale(1.06); box-shadow: 0 0 70px #ff4040aa, 0 4px 24px #0008; }
+    #play-btn:hover  { transform: scale(1.06); box-shadow: 0 0 70px #ff4040aa, 0 4px 24px #0008; }
     #play-btn:active { transform: scale(0.96); }
 
-    /* ── Mobile touch HUD ───────────────────────────────────────────────────── */
+    /* ── Portrait: rotate prompt ────────────────────────────────────────────── */
+    #rotate-msg {
+      display: none;
+      position: fixed; inset: 0; z-index: 50;
+      background: #07080f;
+      flex-direction: column; align-items: center; justify-content: center;
+      color: #fff; gap: 1.2rem;
+    }
+    #rotate-msg .icon { font-size: 4rem; animation: spin 2s linear infinite; }
+    #rotate-msg p { font-size: 1.1rem; color: #6af; letter-spacing: 0.1em; }
+    @keyframes spin {
+      0%   { transform: rotate(0deg);   }
+      40%  { transform: rotate(0deg);   }
+      60%  { transform: rotate(90deg);  }
+      100% { transform: rotate(90deg);  }
+    }
+    @media (orientation: portrait) {
+      #rotate-msg { display: flex !important; }
+    }
+
+    /* ── Touch HUD (landscape mobile only) ─────────────────────────────────── */
     #touch-hud {
       display: none;
       position: fixed; inset: 0; z-index: 10;
-      pointer-events: none; /* pass-through except on buttons */
+      pointer-events: none;
     }
-    .touch-btn {
+
+    /* Generic button style */
+    .tbtn {
       position: absolute;
-      background: rgba(255,255,255,0.12);
-      border: 2px solid rgba(255,255,255,0.25);
-      border-radius: 50%;
-      color: rgba(255,255,255,0.70);
-      font-size: 1.6rem;
       display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
       pointer-events: all;
       touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-      transition: background 0.08s;
+      user-select: none; -webkit-user-select: none;
+      border: 2.5px solid rgba(255,255,255,0.22);
+      background: rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.75);
+      transition: background 0.08s, transform 0.06s;
+      font-size: 1.5rem;
     }
-    .touch-btn:active, .touch-btn.pressed {
-      background: rgba(255,255,255,0.30);
+    .tbtn:active, .tbtn.pressed {
+      background: rgba(255,255,255,0.28);
+      transform: scale(0.93);
     }
 
-    /* Steering: bottom-left cluster */
-    #ctrl-left  { width: 72px; height: 72px; left: 24px;  bottom: 28px; }
-    #ctrl-right { width: 72px; height: 72px; left: 112px; bottom: 28px; }
+    /* ── LEFT cluster — direction ───────────────────────────────────────────── */
+    /* Two large circles side-by-side in bottom-left */
+    #ctrl-left  {
+      width: 80px; height: 80px;
+      left: 24px; bottom: 28px;
+    }
+    #ctrl-right {
+      width: 80px; height: 80px;
+      left: 116px; bottom: 28px;
+    }
 
-    /* Gas / brake: bottom-right */
-    #ctrl-gas   { width: 88px; height: 88px; right: 24px;  bottom: 28px; background: rgba(80,200,80,0.18); border-color: rgba(80,200,80,0.4); }
-    #ctrl-brake { width: 64px; height: 64px; right: 124px; bottom: 44px; background: rgba(200,60,60,0.18); border-color: rgba(200,60,60,0.4); }
+    /* ── RIGHT cluster — throttle ───────────────────────────────────────────── */
+    /* Big GAS at bottom-right, REVERSE above-left of it */
+    #ctrl-gas {
+      width: 90px; height: 90px;
+      right: 24px; bottom: 24px;
+      background: rgba(50,200,80,0.18);
+      border-color: rgba(50,220,80,0.45);
+      font-size: 1.8rem;
+    }
+    #ctrl-back {
+      width: 70px; height: 70px;
+      right: 124px; bottom: 39px;
+      background: rgba(200,140,20,0.18);
+      border-color: rgba(220,160,20,0.40);
+    }
 
-    /* Reset: top-right corner */
-    #ctrl-reset { width: 52px; height: 52px; right: 20px; top: 20px; font-size: 1.1rem; border-radius: 12px; }
+    /* ── Utility row — top of right cluster ─────────────────────────────────── */
+    #ctrl-brake {
+      width: 54px; height: 54px;
+      right: 24px; bottom: 128px;
+      background: rgba(200,50,50,0.18);
+      border-color: rgba(220,50,50,0.40);
+      font-size: 1.1rem;
+    }
+    #ctrl-reset {
+      width: 54px; height: 54px;
+      right: 90px; bottom: 128px;
+      font-size: 1.0rem;
+      border-radius: 14px;
+    }
   </style>
 </head>
 <body>
-  <!-- Overlay shown until the user clicks PLAY -->
+
+  <!-- Portrait rotate prompt (always present, shown via CSS media query) -->
+  <div id="rotate-msg">
+    <div class="icon">&#8635;</div>
+    <p>Rotate to landscape to play</p>
+  </div>
+
+  <!-- Splash overlay -->
   <div id="overlay">
     <h1>SEEDROAD</h1>
     <div class="sub">open-world driving</div>
@@ -99,13 +160,17 @@
     <button id="play-btn">▶ &thinsp;PLAY</button>
   </div>
 
-  <!-- Touch controls (visible on mobile after PLAY) -->
+  <!-- Touch HUD (shown only on touch devices after PLAY) -->
   <div id="touch-hud">
-    <div class="touch-btn" id="ctrl-left">◀</div>
-    <div class="touch-btn" id="ctrl-right">▶</div>
-    <div class="touch-btn" id="ctrl-gas">▲</div>
-    <div class="touch-btn" id="ctrl-brake">■</div>
-    <div class="touch-btn" id="ctrl-reset">R</div>
+    <!-- LEFT: steering -->
+    <div class="tbtn" id="ctrl-left">&#9664;</div>
+    <div class="tbtn" id="ctrl-right">&#9654;</div>
+    <!-- RIGHT: throttle -->
+    <div class="tbtn" id="ctrl-gas">&#9650;</div>
+    <div class="tbtn" id="ctrl-back">&#9660;</div>
+    <!-- UTILITY: brake + reset -->
+    <div class="tbtn" id="ctrl-brake">&#9632;</div>
+    <div class="tbtn" id="ctrl-reset">R</div>
   </div>
 
   <!-- Trunk replaces this with the compiled WASM loader -->
@@ -120,11 +185,17 @@
         document.getElementById('touch-hud').style.display = 'block';
       }
 
-      // Attempt fullscreen on the canvas element
+      // Request landscape lock if the API is available
+      var scr = window.screen;
+      if (scr.orientation && scr.orientation.lock) {
+        scr.orientation.lock('landscape').catch(function(){});
+      }
+
+      // Fullscreen
       var el = document.querySelector('canvas') || document.documentElement;
       var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
       if (req) req.call(el).catch(function(){});
-      // Synthetic resize so winit re-measures the canvas after fullscreen
+
       window.dispatchEvent(new Event('resize'));
     });
   </script>
